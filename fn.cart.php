@@ -8382,7 +8382,7 @@ function fn_get_shipping_hash($product_groups)
 function fn_checkout_update_steps(&$cart, &$auth, $params)
 {
     $redirect_params = array();
-    $user_data = !empty($params['user_data']) ? $params['user_data'] : array();
+    $user_data = !empty($params['user_data']) ? $params['user_data'] : (!empty($cart['user_data']) ? $cart['user_data'] : array());
     $user_data = array_map(function($param){
         return is_array($param) ? $param : trim($param);
     }, $user_data);
@@ -8447,7 +8447,7 @@ function fn_checkout_update_steps(&$cart, &$auth, $params)
 
             $user_data = fn_array_merge($current_user_data, $user_data);
 
-            if (empty($params['ship_to_another'])) {
+            if (empty($params['ship_to_another']) && empty($cart['ship_to_another'])) {
                 $profile_fields = fn_get_profile_fields('O');
                 fn_fill_address($user_data, $profile_fields);
             }
@@ -8474,7 +8474,7 @@ function fn_checkout_update_steps(&$cart, &$auth, $params)
                 $send_notification = true;
             }
 
-            list($user_id, $profile_id) = fn_update_user($auth['user_id'], $user_data, $auth, !empty($params['ship_to_another']), $send_notification, false);
+            list($user_id, $profile_id) = fn_update_user($auth['user_id'], $user_data, $auth, (!empty($params['ship_to_another']) || !empty($cart['ship_to_another'])), $send_notification, false);
 
             $cart['profile_id'] = $profile_id;
         }
@@ -8520,7 +8520,7 @@ function fn_checkout_update_steps(&$cart, &$auth, $params)
         }
 
         // Fill shipping info with billing if needed
-        if (empty($params['ship_to_another']) && $process_step_two) {
+        if (empty($params['ship_to_another']) && empty($cart['ship_to_another']) && $process_step_two) {
             $profile_fields = fn_get_profile_fields('O');
             fn_fill_address($cart['user_data'] , $profile_fields);
         }
@@ -9432,9 +9432,14 @@ function fn_is_cart_user_data_changed(array &$cart, array $auth)
     // Here check the previous and the current checksum of user_data - if they are different, recalculate the cart.
     $current_state = fn_crc32(serialize($cart['user_data']));
 
-    $cart['user_data'] = fn_get_user_info($auth['user_id'], empty($_REQUEST['profile']), $cart['profile_id']);
-    fn_filter_hidden_profile_fields($cart['user_data'], 'O');
-    ksort($cart['user_data']);
-
-    return $current_state != fn_crc32(serialize($cart['user_data']));
+     $_user_data = fn_get_user_info($auth['user_id'], empty($_REQUEST['profile']), $cart['profile_id']);
+     fn_filter_hidden_profile_fields($_user_data, 'O');
+     ksort($_user_data);
+ 
+     $result = ($current_state != fn_crc32(serialize($_user_data)));
+     
+     if(!$result)
+ 	$cart['user_data'] = $_user_data;
+     
+     return $result;
 }
